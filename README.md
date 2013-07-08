@@ -5,8 +5,21 @@ Cut POLYGON WKT into slices or parts. Useful to cut a big polygon like a satelli
 
 Original WKT 
 
+![original](https://raw.github.com/jjrom/wktslicer/master/img/wkt_original.png)
 
-WKT cuts between -70 and 70 degrees latitude
+WKT cut between -70 and 70 degrees latitude
+
+![cut](https://raw.github.com/jjrom/wktslicer/master/img/wkt_cut70.png)
+
+WKT cut into 10 degrees latitude slices
+
+![slice](https://raw.github.com/jjrom/wktslicer/master/img/wkt_slice10.png)
+
+
+WKT cut into 10 degrees square parts
+
+![grid](https://raw.github.com/jjrom/wktslicer/master/img/wkt_grid10.png)
+
 
 Installation
 ============
@@ -92,12 +105,4 @@ You can also launch each steps indivudally instead of using the wktslicerRun.sh 
 7. Export WKT with identifier P3L1TBG1015134J to GeoJSON
 
 		php $WKTSLICER_HOME/scripts/wktslicerToGeoJSON.php -i P3L1TBG1015134J
-
-
-
-
-
-
-
-
 
