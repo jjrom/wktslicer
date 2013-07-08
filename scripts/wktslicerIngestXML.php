@@ -55,7 +55,7 @@ if (!$_SERVER['argv'][1]) {
 
 // Help
 $help = "\n## Usage php wktslicerIngestXML.php -f <Folder containing XML files> [-d <database name - default is 'wktslicer'>]\n\n";
-$help .= "  XML files must follow SIPAD structure - see example here \n\n";
+$help .= "  XML files must follow SIPAD structure - see example here https://raw.github.com/jjrom/wktslicer/master/data/SIPAD_example_file.xml \n\n";
 
 // Default values
 $dbname = "wktslicer";
