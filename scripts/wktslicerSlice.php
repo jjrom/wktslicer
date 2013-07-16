@@ -20,15 +20,16 @@ if (empty($_SERVER['SHELL'])) {
 # Default values
 $gridsize = 10;
 $latitude = 70;
+$gap = 0;
 $dbname = 'wktslicer';
-$help = "\n## Usage php splitpolygonSplit.php -i <identifier - 'ALL' for all database>  -t <'cut', 'slice' or 'box'>[-d <database name - default 'wktslicer'> -o <output 'csv' or 'geojson'> -g <grid_size>]\n\n";
+$help = "\n## Usage php splitpolygonSplit.php -i <identifier - 'ALL' for all database>  -t <'cut', 'slice' or 'box'>[-g <gap in degrees between latitude> -d <database name - default 'wktslicer'> -o <output 'csv' or 'geojson'> -s <grid_size>]\n\n Note : -g only works on 'slice'. It is used to create MUTLIPOLYGONS from POLYGONS (topological constraints impose that POLYGONS from a MULTIPOLYGON do not touch)\n\n";
 
-$options = getopt("d:g:i:o:t:h");
+$options = getopt("g:d:s:i:o:t:h");
 foreach($options as $option => $value) {
     if ($option === "t") {
         $action = $value;
     }
-    if ($option === "g") {
+    if ($option === "s") {
         $gridsize = intval($value);
     }
     if ($option === "i") {
@@ -39,6 +40,9 @@ foreach($options as $option => $value) {
     }
     if ($option === "d") {
         $dbname = $value;
+    }
+    if ($option === "g") {
+        $gap = $value;
     }
     if ($option === "h") {
         echo $help;
@@ -83,6 +87,7 @@ else {
 }
 
 $identifiers = pg_query($dbh, $query) or die(pg_last_error());
+$count = 0;
 
 while ($identifier = pg_fetch_assoc($identifiers)) {
 
@@ -97,7 +102,7 @@ while ($identifier = pg_fetch_assoc($identifiers)) {
         $wkt = "POLYGON((" . $str . "))";
 
         // Intersect grid wkt with input wkt
-        $query2 = "SELECT identifier, " . $parser . "(st_intersection(footprint, GeometryFromText('" . $wkt . "', 4326))) as geom from inputwkts WHERE identifier = '" . $identifier['identifier'] . "' AND st_isvalid(footprint) AND st_intersects(footprint, GeometryFromText('" . $wkt . "', 4326)) = 't'";
+        $query2 = "SELECT identifier, " . $parser . "((ST_Reverse(ST_ForceRHR(st_intersection(footprint, GeometryFromText('" . $wkt . "', 4326))))) as geom from inputwkts WHERE identifier = '" . $identifier['identifier'] . "' AND st_isvalid(footprint) AND st_intersects(footprint, GeometryFromText('" . $wkt . "', 4326)) = 't'";
         
         $results = pg_query($dbh, $query2);
 
@@ -133,13 +138,14 @@ while ($identifier = pg_fetch_assoc($identifiers)) {
         $lon2 = 180;
         for ($lat = -90; $lat <= 90; $lat = $lat + $gridsize) {
             
-            $lat2 = $lat + $gridsize;
+            $lat1 = $lat + $gap;
+            $lat2 = $lat1 + $gridsize - $gap;
 
-            $str = $lon . " " . $lat . "," . $lon . " " . $lat2 . "," . $lon2 . " " . $lat2 . "," . $lon2 . " " . $lat . "," . $lon . " " . $lat;
+            $str = $lon . " " . $lat1 . "," . $lon . " " . $lat2 . "," . $lon2 . " " . $lat2 . "," . $lon2 . " " . $lat1 . "," . $lon . " " . $lat1;
             $wkt = "POLYGON((" . $str . "))";
 
             // Intersect grid wkt with input wkt
-            $query2 = "SELECT identifier, " . $parser . "(st_intersection(footprint, GeometryFromText('" . $wkt . "', 4326))) as geom from inputwkts WHERE identifier = '" . $identifier['identifier'] . "' AND st_isvalid(footprint) AND st_intersects(footprint, GeometryFromText('" . $wkt . "', 4326)) = 't'";
+            $query2 = "SELECT identifier, " . $parser . "(ST_Reverse(ST_ForceRHR(st_intersection(footprint, GeometryFromText('" . $wkt . "', 4326))))) as geom from inputwkts WHERE identifier = '" . $identifier['identifier'] . "' AND st_isvalid(footprint) AND st_intersects(footprint, GeometryFromText('" . $wkt . "', 4326)) = 't'";
             
             $results = pg_query($dbh, $query2);
 
@@ -183,7 +189,7 @@ while ($identifier = pg_fetch_assoc($identifiers)) {
                 $wkt = "POLYGON((" . $str . "))";
 
                 // Intersect grid wkt with input wkt
-                $query2 = "SELECT identifier, " . $parser . "(st_intersection(footprint, GeometryFromText('" . $wkt . "', 4326))) as geom from inputwkts WHERE identifier = '" . $identifier['identifier'] . "' AND st_isvalid(footprint) AND st_intersects(footprint, GeometryFromText('" . $wkt . "', 4326)) = 't'";
+                $query2 = "SELECT identifier, " . $parser . "((ST_Reverse(ST_ForceRHR(st_intersection(footprint, GeometryFromText('" . $wkt . "', 4326))))) as geom from inputwkts WHERE identifier = '" . $identifier['identifier'] . "' AND st_isvalid(footprint) AND st_intersects(footprint, GeometryFromText('" . $wkt . "', 4326)) = 't'";
                 
                 $results = pg_query($dbh, $query2);
 
