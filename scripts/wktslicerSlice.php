@@ -20,11 +20,11 @@ function simplify($wkt, $precision) {
     $pairs = explode(",", str_replace(")", "", str_replace("(", "", str_replace("POLYGON", "", $wkt))));
     $l = count($pairs);
     $arr = array();
-    for ($i = 1; $i < $l; $i++) {
+    for ($i = 0; $i < $l; $i++) {
         $coordinates = explode(" ", trim($pairs[$i]));
         $lon = number_format(floatval($coordinates[0]), $precision);
         $lat = number_format(floatval($coordinates[1]), $precision);
-        $arr[$i - 1] = $lon . " " . $lat;
+        $arr[$i] = $lon . " " . $lat;
     }
 
     return "POLYGON((" . join(",", $arr) . "))";
