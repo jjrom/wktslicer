@@ -1,4 +1,5 @@
 <?php
+
 /*
  * WKT slicer - cut a polygon into slices or parts to speed up database indexing
  *
@@ -7,7 +8,58 @@
  *
  */
 
-/* ------------------------- MAIN ----------------------*/
+/*
+ * Simplify a WKT to the given precision (i.e. number of digits)
+ * 
+ * @param {String} $wkt : must be a POLYGON
+ * @param {Integer} $precision
+ */
+
+function simplify($wkt, $precision) {
+
+    $pairs = explode(",", str_replace(")", "", str_replace("(", "", str_replace("POLYGON", "", $wkt))));
+    $l = count($pairs);
+    $arr = array();
+    for ($i = 1; $i < $l; $i++) {
+        $coordinates = explode(" ", trim($pairs[$i]));
+        $lon = number_format(floatval($coordinates[0]), $precision);
+        $lat = number_format(floatval($coordinates[1]), $precision);
+        $arr[$i - 1] = $lon . " " . $lat;
+    }
+
+    return "POLYGON((" . join(",", $arr) . "))";
+}
+
+/*
+ * Returns an array of WKT POLYGONS from A MULTIPOLYGON
+ * 
+ * @param {String} $wkt : a WKT MULTIPOLYGON or POLYGON
+ * @return {array} $arr : an array of POLYGON WKT
+ */
+
+function multipolygonToPolygons($wkt) {
+
+    /*
+     * If input is a POLYGON returns it within an array of one element
+     */
+    if (strrpos("MULTIPOLYGON", $wkt === false)) {
+        return array($wkt);
+    }
+
+    /*
+     * Split MULTIPOLYGON by detecting ")),(("
+     */
+    $parts = explode(")),((", str_replace(")))", "))", str_replace("(((", "((", str_replace("MULTIPOLYGON", "", $wkt))));
+    $l = count($parts);
+    $arr = array();
+    for ($i = 0; $i < $l; $i++) {
+        $arr[$i] = "POLYGON((" . str_replace("))", "", str_replace("((", "", $parts[$i])) . "))";
+    }
+
+    return $arr;
+}
+
+/* ------------------------- MAIN ---------------------- */
 
 // Remove PHP NOTICE
 error_reporting(E_PARSE);
@@ -21,11 +73,12 @@ if (empty($_SERVER['SHELL'])) {
 $gridsize = 10;
 $latitude = 70;
 $gap = 0;
+$precision = -1;
 $dbname = 'wktslicer';
-$help = "\n## Usage php splitpolygonSplit.php -i <identifier - 'ALL' for all database>  -t <'cut', 'slice' or 'box'>[-g <gap in degrees between latitude> -d <database name - default 'wktslicer'> -o <output 'csv' or 'geojson'> -s <grid_size>]\n\n Note : -g only works on 'slice'. It is used to create MUTLIPOLYGONS from POLYGONS (topological constraints impose that POLYGONS from a MULTIPOLYGON do not touch)\n\n";
+$help = "\n## Usage php splitpolygonSplit.php -i <identifier - 'ALL' for all database>  -t <'cut', 'slice' or 'box'>[-p <precision i.e. number of digits> -g <gap in degrees between latitude> -d <database name - default 'wktslicer'> -o <output 'csv' or 'geojson'> -s <grid_size>]\n\n Note : -g only works on 'slice'. It is used to create MUTLIPOLYGONS from POLYGONS (topological constraints impose that POLYGONS from a MULTIPOLYGON do not touch)\n\n";
 
-$options = getopt("g:d:s:i:o:t:h");
-foreach($options as $option => $value) {
+$options = getopt("p:g:d:s:i:o:t:h");
+foreach ($options as $option => $value) {
     if ($option === "t") {
         $action = $value;
     }
@@ -44,6 +97,9 @@ foreach($options as $option => $value) {
     if ($option === "g") {
         $gap = $value;
     }
+    if ($option === "p") {
+        $precision = $value;
+    }
     if ($option === "h") {
         echo $help;
         exit;
@@ -60,19 +116,18 @@ if (!$action) {
 }
 
 // Connect to DB
-$dbh = pg_connect("host=localhost dbname=".$dbname." user=postgres password=postgres") or die(pg_last_error());
+$dbh = pg_connect("host=localhost dbname=" . $dbname . " user=postgres password=postgres") or die(pg_last_error());
 
 // Loop on each input polygon
 if ($identifier === "ALL") {
     $query = "SELECT identifier FROM inputwkts";
-}
-else {
+} else {
     $query = "SELECT identifier FROM inputwkts WHERE identifier = '" . $identifier . "'";
 }
 
 /*
-* Initialize GeoJSON empty FeatureCollection
-*/
+ * Initialize GeoJSON empty FeatureCollection
+ */
 $out = array(
     'type' => 'FeatureCollection',
     'totalResults' => 0,
@@ -81,8 +136,7 @@ $out = array(
 
 if ($output === 'geojson') {
     $parser = "ST_AsGeoJSON";
-}
-else {
+} else {
     $parser = "ST_AsText";
 }
 
@@ -103,41 +157,39 @@ while ($identifier = pg_fetch_assoc($identifiers)) {
 
         // Intersect grid wkt with input wkt
         $query2 = "SELECT identifier, " . $parser . "((ST_Reverse(ST_ForceRHR(st_intersection(footprint, GeometryFromText('" . $wkt . "', 4326))))) as geom from inputwkts WHERE identifier = '" . $identifier['identifier'] . "' AND st_isvalid(footprint) AND st_intersects(footprint, GeometryFromText('" . $wkt . "', 4326)) = 't'";
-        
+
         $results = pg_query($dbh, $query2);
 
         while ($result = pg_fetch_assoc($results)) {
 
             if ($output === 'geojson') {
-                $feature = array(
-                      'type' => 'Feature',
-                      'geometry' => json_decode($result['geom'], true),
-                      'properties' => array(
-                            'identifier' => $result['identifier'] 
-                       )
-                );
-            }
-            else {
-                $feature = array($result['identifier'], $result['geom']);
-            }
 
-            /* Add feature array to feature collection array */
-            array_push($out['features'], $feature);
+                /* Add feature array to feature collection array */
+                array_push($out['features'], array(
+                    'type' => 'Feature',
+                    'geometry' => json_decode($result['geom'], true),
+                    'properties' => array(
+                        'identifier' => $result['identifier']
+                    )
+                ));
+            } else {
+                $arr = multipolygonToPolygons($result['geom']);
+                for ($i = 0; $i < count($arr); $i++) {
+                    array_push($out['features'], array($result['identifier'], $arr[$i]));
+                }
+            }
 
             /* Increment the number of element */
             $count++;
         }
-
-    }
-
-    else if ($action === "slice") {
+    } else if ($action === "slice") {
 
         // Product the grid
         // Latitude from -90 to 90
         $lon = -180;
         $lon2 = 180;
         for ($lat = -90; $lat <= 90; $lat = $lat + $gridsize) {
-            
+
             $lat1 = $lat + $gap;
             $lat2 = $lat1 + $gridsize - $gap;
 
@@ -145,43 +197,47 @@ while ($identifier = pg_fetch_assoc($identifiers)) {
             $wkt = "POLYGON((" . $str . "))";
 
             // Intersect grid wkt with input wkt
-            $query2 = "SELECT identifier, " . $parser . "(ST_Reverse(ST_ForceRHR(st_intersection(footprint, GeometryFromText('" . $wkt . "', 4326))))) as geom from inputwkts WHERE identifier = '" . $identifier['identifier'] . "' AND st_isvalid(footprint) AND st_intersects(footprint, GeometryFromText('" . $wkt . "', 4326)) = 't'";
-            
+            if ($output === 'geojson' && $precision !== -1) {
+                $query2 = "SELECT identifier, " . $parser . "(ST_Reverse(ST_ForceRHR(st_intersection(footprint, GeometryFromText('" . $wkt . "', 4326)))), " . $precision . ") as geom from inputwkts WHERE identifier = '" . $identifier['identifier'] . "' AND st_isvalid(footprint) AND st_intersects(footprint, GeometryFromText('" . $wkt . "', 4326)) = 't'";
+            } else {
+                $query2 = "SELECT identifier, " . $parser . "(ST_Reverse(ST_ForceRHR(st_intersection(footprint, GeometryFromText('" . $wkt . "', 4326))))) as geom from inputwkts WHERE identifier = '" . $identifier['identifier'] . "' AND st_isvalid(footprint) AND st_intersects(footprint, GeometryFromText('" . $wkt . "', 4326)) = 't'";
+            }
             $results = pg_query($dbh, $query2);
 
             while ($result = pg_fetch_assoc($results)) {
 
-                if ($output === 'geojson') {
-                    $feature = array(
-                          'type' => 'Feature',
-                          'geometry' => json_decode($result['geom'], true),
-                          'properties' => array(
-                                'identifier' => $result['identifier'] 
-                           )
-                    );
-                }
-                else {
-                    $feature = array($result['identifier'], $result['geom']);
-                }
-                    
                 /* Add feature array to feature collection array */
-                array_push($out['features'], $feature);
+                if ($output === 'geojson') {
+                    array_push($out['features'], array(
+                        'type' => 'Feature',
+                        'geometry' => json_decode($result['geom'], true),
+                        'properties' => array(
+                            'identifier' => $result['identifier']
+                        )
+                    ));
+                } else {
+                    $arr = multipolygonToPolygons($result['geom']);
+                    for ($i = 0; $i < count($arr); $i++) {
+                        $wkt = $arr[$i];
+                        if ($precision !== -1) {
+                            $wkt = simplify($wkt, $precision);
+                        }
+                        array_push($out['features'], array($result['identifier'], $wkt));
+                    }
+                }
 
                 /* Increment the number of element */
                 $count++;
             }
-
-        }        
-    }
-
-    else if ($action === "grid") {
+        }
+    } else if ($action === "grid") {
 
         // Product the grid
         // Longitude from -180 to 180
         for ($lon = -180; $lon <= 180; $lon = $lon + $gridsize) {
             // Latitude from -90 to 90
             for ($lat = -90; $lat <= 90; $lat = $lat + $gridsize) {
-                
+
                 $lat2 = $lat + $gridsize;
                 $lon2 = $lon + $gridsize;
 
@@ -190,33 +246,30 @@ while ($identifier = pg_fetch_assoc($identifiers)) {
 
                 // Intersect grid wkt with input wkt
                 $query2 = "SELECT identifier, " . $parser . "((ST_Reverse(ST_ForceRHR(st_intersection(footprint, GeometryFromText('" . $wkt . "', 4326))))) as geom from inputwkts WHERE identifier = '" . $identifier['identifier'] . "' AND st_isvalid(footprint) AND st_intersects(footprint, GeometryFromText('" . $wkt . "', 4326)) = 't'";
-                
+
                 $results = pg_query($dbh, $query2);
 
                 while ($result = pg_fetch_assoc($results)) {
 
                     if ($output === 'geojson') {
-                        $feature = array(
-                              'type' => 'Feature',
-                              'geometry' => json_decode($result['geom'], true),
-                              'properties' => array(
-                                    'identifier' => $result['identifier'] 
-                               )
-                        );
+                        array_push($out['features'], array(
+                            'type' => 'Feature',
+                            'geometry' => json_decode($result['geom'], true),
+                            'properties' => array(
+                                'identifier' => $result['identifier']
+                            )
+                        ));
+                    } else {
+                        $arr = multipolygonToPolygons($result['geom']);
+                        for ($i = 0; $i < count($arr); $i++) {
+                            array_push($out['features'], array($result['identifier'], $arr[$i]));
+                        }
                     }
-                    else {
-                        $feature = array($result['identifier'], $result['geom']);
-                    }
-                        
-                    /* Add feature array to feature collection array */
-                    array_push($out['features'], $feature);
 
                     /* Increment the number of element */
                     $count++;
                 }
-
-            }        
-
+            }
         }
     }
 }
@@ -225,16 +278,14 @@ while ($identifier = pg_fetch_assoc($identifiers)) {
 pg_close($dbh);
 
 $out['totalResults'] = $count;
-  
+
 if ($output === 'geojson') {
-    echo json_encode($out); 
-}
-else {
+    echo json_encode($out);
+} else {
     foreach ($out['features'] as $feature) {
         echo join(";", $feature) . "\n";
     }
 }
 // Properly exits script
 exit(0);
-
 ?>
