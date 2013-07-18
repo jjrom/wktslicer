@@ -42,14 +42,14 @@ function multipolygonToPolygons($wkt) {
     /*
      * If input is a POLYGON returns it within an array of one element
      */
-    if (strrpos("MULTIPOLYGON", $wkt === false)) {
+    if (strrpos("MULTIPOLYGON", $wkt) === false) {
         return array($wkt);
     }
 
     /*
      * Split MULTIPOLYGON by detecting ")),(("
      */
-    $parts = explode(")),((", str_replace(")))", "))", str_replace("(((", "((", str_replace("MULTIPOLYGON", "", $wkt))));
+    $parts = explode(")),((", str_replace(")))", "))", str_replace("(((", "((", str_replace("MULTIPOLYGON", "", $wkt))));  
     $l = count($parts);
     $arr = array();
     for ($i = 0; $i < $l; $i++) {
