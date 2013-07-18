@@ -147,8 +147,8 @@ while ($identifier = pg_fetch_assoc($identifiers)) {
 
     if ($action === "cut") {
 
-        $lon = -180;
-        $lon2 = 180;
+        $lon = -360;
+        $lon2 = 360;
         $lat = $latitude;
         $lat2 = $latitude * -1;
 
@@ -186,8 +186,8 @@ while ($identifier = pg_fetch_assoc($identifiers)) {
 
         // Product the grid
         // Latitude from -90 to 90
-        $lon = -180;
-        $lon2 = 180;
+        $lon = -360;
+        $lon2 = 360;
         for ($lat = -90; $lat <= 90; $lat = $lat + $gridsize) {
 
             $lat1 = $lat + $gap;
@@ -233,8 +233,8 @@ while ($identifier = pg_fetch_assoc($identifiers)) {
     } else if ($action === "grid") {
 
         // Product the grid
-        // Longitude from -180 to 180
-        for ($lon = -180; $lon <= 180; $lon = $lon + $gridsize) {
+        // Longitude from -360 to 360
+        for ($lon = -360; $lon <= 360; $lon = $lon + $gridsize) {
             // Latitude from -90 to 90
             for ($lat = -90; $lat <= 90; $lat = $lat + $gridsize) {
 
