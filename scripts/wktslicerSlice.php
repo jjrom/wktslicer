@@ -156,8 +156,12 @@ while ($identifier = pg_fetch_assoc($identifiers)) {
         $wkt = "POLYGON((" . $str . "))";
 
         // Intersect grid wkt with input wkt
-        $query2 = "SELECT identifier, " . $parser . "((ST_Reverse(ST_ForceRHR(st_intersection(footprint, GeometryFromText('" . $wkt . "', 4326))))) as geom from inputwkts WHERE identifier = '" . $identifier['identifier'] . "' AND st_isvalid(footprint) AND st_intersects(footprint, GeometryFromText('" . $wkt . "', 4326)) = 't'";
-
+        if ($output === 'geojson' && $precision !== -1) {
+            $query2 = "SELECT identifier, " . $parser . "(ST_Reverse(ST_ForceRHR(st_intersection(footprint, GeometryFromText('" . $wkt . "', 4326)))), " . $precision . ") as geom from inputwkts WHERE identifier = '" . $identifier['identifier'] . "' AND st_isvalid(footprint) AND st_intersects(footprint, GeometryFromText('" . $wkt . "', 4326)) = 't'";
+        } else {
+            $query2 = "SELECT identifier, " . $parser . "(ST_Reverse(ST_ForceRHR(st_intersection(footprint, GeometryFromText('" . $wkt . "', 4326))))) as geom from inputwkts WHERE identifier = '" . $identifier['identifier'] . "' AND st_isvalid(footprint) AND st_intersects(footprint, GeometryFromText('" . $wkt . "', 4326)) = 't'";
+        }
+        
         $results = pg_query($dbh, $query2);
 
         while ($result = pg_fetch_assoc($results)) {
