@@ -48,14 +48,27 @@ echo "Split SIPAD big polygons into 10 degrees latitude slices and store to data
 php wktslicerSlice.php -i ALL -a -t slice
 
 # ---------------------------------------------------------------------------------- 
-# 4. Performances test - Get intersecting polygons upon Toulouse 
-#       POLYGON((1.1013793945311965 43.52751299421623,1.7605590820312442 43.52751299421623,1.7605590820312442 43.68636569542979,1.1013793945311965 43.68636569542979,1.1013793945311965 43.52751299421623))
+# 4. Performances test
 # ----------------------------------------------------------------------------------
+
+# Get intersecting polygons on small area (Toulouse, France) 
+#     POLYGON((1.1013793945311965 43.52751299421623,1.7605590820312442 43.52751299421623,1.7605590820312442 43.68636569542979,1.1013793945311965 43.68636569542979,1.1013793945311965 43.52751299421623))
+
 psql -U postgres -d wktslicer << EOF
 -- Direct query on inputwkts
 EXPLAIN ANALYSE SELECT count(identifier) FROM inputwkts WHERE ST_intersects(footprint, GeomFromText('POLYGON((1.1013793945311965 43.52751299421623,1.7605590820312442 43.52751299421623,1.7605590820312442 43.68636569542979,1.1013793945311965 43.68636569542979,1.1013793945311965 43.52751299421623))', 4326));
 -- Indirect query using slicing
 EXPLAIN ANALYSE SELECT count(distinct(i_identifier)) FROM outputwkts WHERE ST_intersects(footprint, GeomFromText('POLYGON((1.1013793945311965 43.52751299421623,1.7605590820312442 43.52751299421623,1.7605590820312442 43.68636569542979,1.1013793945311965 43.68636569542979,1.1013793945311965 43.52751299421623))', 4326));
+EOF
+
+# Get intersecting polygons on large area (Spain) 
+#     POLYGON((-9 44, 4 42,-2 37,-10 36,-9 44))
+
+psql -U postgres -d wktslicer << EOF
+-- Direct query on inputwkts
+EXPLAIN ANALYSE SELECT count(identifier) FROM inputwkts WHERE ST_intersects(footprint, GeomFromText('POLYGON((-9 44, 4 42,-2 37,-10 36,-9 44))', 4326));
+-- Indirect query using slicing
+EXPLAIN ANALYSE SELECT count(distinct(i_identifier)) FROM outputwkts WHERE ST_intersects(footprint, GeomFromText('POLYGON((-9 44, 4 42,-2 37,-10 36,-9 44))', 4326));
 EOF
 
 echo " Done !"
