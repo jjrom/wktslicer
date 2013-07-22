@@ -70,15 +70,19 @@ if (empty($_SERVER['SHELL'])) {
 }
 
 # Default values
+$storeToDB = false;
 $gridsize = 10;
 $latitude = 70;
 $gap = 0;
 $precision = -1;
 $dbname = 'wktslicer';
-$help = "\n## Usage php splitpolygonSplit.php -i <identifier - 'ALL' for all database>  -t <'cut', 'slice' or 'box'>[-p <precision i.e. number of digits> -g <gap in degrees between latitude> -d <database name - default 'wktslicer'> -o <output 'csv' or 'geojson'> -s <grid_size>]\n\n Note : -g only works on 'slice'. It is used to create MUTLIPOLYGONS from POLYGONS (topological constraints impose that POLYGONS from a MULTIPOLYGON do not touch)\n\n";
+$help = "\n## Usage php splitpolygonSplit.php -i <identifier - 'ALL' for all database>  -t <'cut', 'slice' or 'box'>[-a -p <precision i.e. number of digits> -g <gap in degrees between latitude> -d <database name - default 'wktslicer'> -o <output 'csv' or 'geojson'> -s <grid_size>]\n\n Note : If -a is set, then result is stored within outputwkts database table (default not stored). This option is ignored if  -o 'geojson' is set\n -g only works on 'slice'. It is used to create MUTLIPOLYGONS from POLYGONS (topological constraints impose that POLYGONS from a MULTIPOLYGON do not touch)\n\n";
 
-$options = getopt("p:g:d:s:i:o:t:h");
+$options = getopt("ap:g:d:s:i:o:t:h");
 foreach ($options as $option => $value) {
+    if ($option === "a") {
+        $storeToDB = true;
+    }
     if ($option === "t") {
         $action = $value;
     }
@@ -278,18 +282,24 @@ while ($identifier = pg_fetch_assoc($identifiers)) {
     }
 }
 
-// Close database
-pg_close($dbh);
-
 $out['totalResults'] = $count;
 
 if ($output === 'geojson') {
     echo json_encode($out);
 } else {
     foreach ($out['features'] as $feature) {
-        echo join(";", $feature) . "\n";
+        if ($storeToDB) {
+            pg_query($dbh, "INSERT INTO outputwkts (i_identifier, footprint) VALUES ('" . $feature[0] . "','SRID=4326;" . $feature[1] . "');");
+            echo "Result stored to outputwkts table\n";
+        }
+        else {
+            echo join(";", $feature) . "\n";
+        }
     }
 }
+
 // Properly exits script
+pg_close($dbh);
 exit(0);
+
 ?>

@@ -39,14 +39,24 @@ cd $WKTSLICER_HOME/scripts
 php wktslicerIngestXML.php -f $DATA_FOLDER
 
 # ---------------------------------------------------------------------------------- 
-# 3. Split SIPAD big polygons into smaller polygon based on a 4x4 square degrees grid
+# 3. Split SIPAD big polygons into smaller polygon based on a 10x10 square degrees grid
 # ----------------------------------------------------------------------------------
-echo "Split SIPAD big polygons into 5 degrees latitude slices"
-php wktslicerSplice.php $DATA_FOLDER
-
 echo "Cut SIPAD big polygons within a -70/+70 degrees latitude box"
-php wktslicerSplice.php $DATA_FOLDER
+php wktslicerSplice.php -i ALL -t cut > /tmp/cut.csv
 
+echo "Split SIPAD big polygons into 10 degrees latitude slices and store to database"
+php wktslicerSlice.php -i ALL -a -t slice
+
+# ---------------------------------------------------------------------------------- 
+# 4. Performances test - Get intersecting polygons upon Toulouse 
+#       POLYGON((1.1013793945311965 43.52751299421623,1.7605590820312442 43.52751299421623,1.7605590820312442 43.68636569542979,1.1013793945311965 43.68636569542979,1.1013793945311965 43.52751299421623))
+# ----------------------------------------------------------------------------------
+psql -U postgres -d wktslicer << EOF
+-- Direct query on inputwkts
+EXPLAIN ANALYSE SELECT count(identifier) FROM inputwkts WHERE ST_intersects(footprint, GeomFromText('POLYGON((1.1013793945311965 43.52751299421623,1.7605590820312442 43.52751299421623,1.7605590820312442 43.68636569542979,1.1013793945311965 43.68636569542979,1.1013793945311965 43.52751299421623))', 4326));
+-- Indirect query using slicing
+EXPLAIN ANALYSE SELECT count(distinct(i_identifier)) FROM outputwkts WHERE ST_intersects(footprint, GeomFromText('POLYGON((1.1013793945311965 43.52751299421623,1.7605590820312442 43.52751299421623,1.7605590820312442 43.68636569542979,1.1013793945311965 43.68636569542979,1.1013793945311965 43.52751299421623))', 4326));
+EOF
 
 echo " Done !"
 echo ""
