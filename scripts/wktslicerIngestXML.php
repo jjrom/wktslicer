@@ -1,4 +1,5 @@
 <?php
+
 /*
  * WKT slicer - cut a polygon into slices or parts to speed up database indexing
  *
@@ -9,7 +10,8 @@
  *
  */
 
- /* --------------------- FUNCTIONS ----------------------*/
+/* --------------------- FUNCTIONS ---------------------- */
+
 function getXmlList($directory) {
 
     // create an array to hold directory list
@@ -25,7 +27,7 @@ function getXmlList($directory) {
     while ($file = readdir($handler)) {
 
         // if file isn't this directory or its parent, add it to the results
-        if(in_array(strtolower(substr($file,-3)),$allowed_types)) {
+        if (in_array(strtolower(substr($file, -3)), $allowed_types)) {
             $results[] = $file;
         }
     }
@@ -37,7 +39,7 @@ function getXmlList($directory) {
     return $results;
 }
 
-/* ------------------------- MAIN ----------------------*/
+/* ------------------------- MAIN ---------------------- */
 
 // Remove PHP NOTICE
 error_reporting(E_PARSE);
@@ -55,7 +57,7 @@ $help .= "  XML files must follow SIPAD structure - see example here https://raw
 $dbname = "wktslicer";
 
 $options = getopt("d:f:h");
-foreach($options as $option => $value) {
+foreach ($options as $option => $value) {
     if ($option === "d") {
         $dbname = $value;
     }
@@ -74,30 +76,41 @@ if (!$datafolder) {
 }
 
 // Connect to DB
-$dbh = pg_connect("host=localhost dbname=".$dbname." user=postgres password=postgres") or die(pg_last_error());
+$dbh = pg_connect("host=localhost dbname=" . $dbname . " user=postgres password=postgres") or die(pg_last_error());
 
 // Get all xml files
 $xmlFiles = getXmlList($datafolder);
 
+// Number of inserts
+$total = 0;
+
 // Loop over each xml files
 foreach ($xmlFiles as $xml) {
+    
+    echo "Processing file $xml \n";
+    $count = 0;
+    
+    // Create a new dom instance
+    $dom = new DomDocument();
 
-	// Create a new dom instance
-	$dom = new DomDocument();
+    // Load the xml file
+    $dom->load($datafolder . '/' . $xml);
 
-	// Load the xml file
-	$dom->load($datafolder. '/' . $xml);
+    // Retrieves each object from XML file
+    $folders = $dom->getElementsByTagName("DATA_OBJECT_DESCRIPTION_POLDER");
 
-	// Retrieves each object from XML file
-	$folders = $dom->getElementsByTagName("DATA_OBJECT_DESCRIPTION_POLDER");
+    foreach ($folders as $folder) {
 
-	foreach ($folders as $folder) {
+        $identifier = $folder->getElementsByTagName("DATA_OBJECT_IDENTIFIER")->item(0)->nodeValue;
 
-		$identifier = $folder->getElementsByTagName("DATA_OBJECT_IDENTIFIER")->item(0)->nodeValue;
-		
         // Initialize empty array for new coordinates
         $newPairs = array();
-
+        
+        // No Geo Information - skip
+        if ($folder->getElementsByTagName("GEO_POLYGON")->length === 0) {
+            continue;
+        }
+        
         // Explode WKT into coordinates array
         $wkt = trim(str_replace("POLYGON", "", str_replace("))", "", str_replace("((", "", $folder->getElementsByTagName("GEO_POLYGON")->item(0)->nodeValue))));
         $pairs = explode(",", $wkt);
@@ -108,39 +121,40 @@ foreach ($xmlFiles as $xml) {
         array_push($newPairs, $lonPrev . " " . $latPrev);
 
         // If Delta(lon(i) - lon(i - 1)) is greater than 180 degrees then add 360 to lon
-        for($i = 1; $i < $l; $i++) {
+        for ($i = 1; $i < $l; $i++) {
             $coordinates = explode(" ", trim($pairs[$i]));
             $lon = floatval($coordinates[0]);
             $lat = floatval($coordinates[1]);
-            
-            if($lon - $lonPrev >= 180) {
+
+            if ($lon - $lonPrev >= 180) {
                 $lon = $lon - 360;
-            }
-            else if ($lon - $lonPrev <= -180) {
+            } else if ($lon - $lonPrev <= -180) {
                 $lon = $lon + 360;
             }
-            
+
             $lonPrev = $lon;
             $latPrev = $lat;
 
             array_push($newPairs, $lon . " " . $lat);
-            
         }
 
 
         $footprint = "SRID=4326;POLYGON((" . join(",", $newPairs) . "))";
 
-		// Prepare INSERT query
-		$query = "INSERT INTO inputwkts (identifier, footprint) VALUES ('" . $identifier . "','" . $footprint . "');";
-        
-		pg_query($dbh, $query) or die();
-	
-	}
-	
+        // Prepare INSERT query
+        $query = "DELETE FROM inputwkts WHERE identifier='" . $identifier . "'";
+        pg_query($dbh, $query) or die(pg_last_error());
+        $query = "INSERT INTO inputwkts (identifier, footprint) VALUES ('" . $identifier . "','" . $footprint . "');";
+        pg_query($dbh, $query) or die(pg_last_error());
+        $count++;
+    }
+    echo "  --> $count products inserted\n";
+    $total += $count;
 }
 
+echo "Done ! $total products inserted\n";
+        
 // Properly exits script
 pg_close($dbh);
 exit(0);
-
 ?>
