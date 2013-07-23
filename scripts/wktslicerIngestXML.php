@@ -145,8 +145,12 @@ foreach ($xmlFiles as $xml) {
         $query = "DELETE FROM inputwkts WHERE identifier='" . $identifier . "'";
         pg_query($dbh, $query) or die(pg_last_error());
         $query = "INSERT INTO inputwkts (identifier, footprint) VALUES ('" . $identifier . "','" . $footprint . "');";
-        pg_query($dbh, $query) or die(pg_last_error());
-        $count++;
+        if (!pg_query($dbh, $query)) {
+            echo "   ====== CANNOT INSERT $identifier =====\n";
+        }
+        else {
+            $count++;
+        }
     }
     echo "  --> $count products inserted\n";
     $total += $count;
