@@ -49,7 +49,7 @@ function multipolygonToPolygons($wkt) {
     /*
      * Split MULTIPOLYGON by detecting ")),(("
      */
-    $parts = explode(")),((", str_replace(")))", "))", str_replace("(((", "((", str_replace("MULTIPOLYGON", "", $wkt))));  
+    $parts = explode(")),((", str_replace(")))", "))", str_replace("(((", "((", str_replace("MULTIPOLYGON", "", $wkt))));
     $l = count($parts);
     $arr = array();
     for ($i = 0; $i < $l; $i++) {
@@ -146,6 +146,7 @@ if ($output === 'geojson') {
 
 $identifiers = pg_query($dbh, $query) or die(pg_last_error());
 $count = 0;
+$inserted = 0;
 
 while ($identifier = pg_fetch_assoc($identifiers)) {
 
@@ -165,7 +166,7 @@ while ($identifier = pg_fetch_assoc($identifiers)) {
         } else {
             $query2 = "SELECT identifier, " . $parser . "(ST_Reverse(ST_ForceRHR(st_intersection(footprint, GeometryFromText('" . $wkt . "', 4326))))) as geom from inputwkts WHERE identifier = '" . $identifier['identifier'] . "' AND st_isvalid(footprint) AND st_intersects(footprint, GeometryFromText('" . $wkt . "', 4326)) = 't'";
         }
-        
+
         $results = pg_query($dbh, $query2);
 
         while ($result = pg_fetch_assoc($results)) {
@@ -183,7 +184,12 @@ while ($identifier = pg_fetch_assoc($identifiers)) {
             } else {
                 $arr = multipolygonToPolygons($result['geom']);
                 for ($i = 0; $i < count($arr); $i++) {
-                    array_push($out['features'], array($result['identifier'], $arr[$i]));
+                    if ($storeToDB) {
+                        pg_query($dbh, "INSERT INTO outputwkts (i_identifier, footprint) VALUES ('" . $result['identifier'] . "','SRID=4326;" . $arr[$i] . "');");
+                        $inserted++;
+                    } else {
+                        echo $result['identifier'] . ";" . $arr[$i] . "\n";
+                    }
                 }
             }
 
@@ -230,7 +236,12 @@ while ($identifier = pg_fetch_assoc($identifiers)) {
                         if ($precision !== -1) {
                             $wkt = simplify($wkt, $precision);
                         }
-                        array_push($out['features'], array($result['identifier'], $wkt));
+                        if ($storeToDB) {
+                            pg_query($dbh, "INSERT INTO outputwkts (i_identifier, footprint) VALUES ('" . $result['identifier'] . "','SRID=4326;" . $wkt . "');");
+                            $inserted++;
+                        } else {
+                            echo $result['identifier'] . ";" . $wkt . "\n";
+                        }
                     }
                 }
 
@@ -270,7 +281,12 @@ while ($identifier = pg_fetch_assoc($identifiers)) {
                     } else {
                         $arr = multipolygonToPolygons($result['geom']);
                         for ($i = 0; $i < count($arr); $i++) {
-                            array_push($out['features'], array($result['identifier'], $arr[$i]));
+                            if ($storeToDB) {
+                                pg_query($dbh, "INSERT INTO outputwkts (i_identifier, footprint) VALUES ('" . $result['identifier'] . "','SRID=4326;" . $arr[$i] . "');");
+                                $inserted++;
+                            } else {
+                                echo $result['identifier'] . ";" . $arr[$i] . "\n";
+                            }
                         }
                     }
 
@@ -286,20 +302,11 @@ $out['totalResults'] = $count;
 
 if ($output === 'geojson') {
     echo json_encode($out);
-} else {
-    foreach ($out['features'] as $feature) {
-        if ($storeToDB) {
-            pg_query($dbh, "INSERT INTO outputwkts (i_identifier, footprint) VALUES ('" . $feature[0] . "','SRID=4326;" . $feature[1] . "');");
-            echo "Result stored to outputwkts table\n";
-        }
-        else {
-            echo join(";", $feature) . "\n";
-        }
-    }
 }
-
+else {
+    "Insert $inserted products in $dbname database\n";
+}
 // Properly exits script
 pg_close($dbh);
 exit(0);
-
 ?>
