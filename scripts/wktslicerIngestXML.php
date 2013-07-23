@@ -47,12 +47,6 @@ if (empty($_SERVER['SHELL'])) {
     exit;
 }
 
-// Get location and server url
-if (!$_SERVER['argv'][1]) {
-    echo "\n    Usage : " . $_SERVER['argv'][0] . " [DATA_FOLDER]" . "\n\n";
-    exit;
-}
-
 // Help
 $help = "\n## Usage php wktslicerIngestXML.php -f <Folder containing XML files> [-d <database name - default is 'wktslicer'>]\n\n";
 $help .= "  XML files must follow SIPAD structure - see example here https://raw.github.com/jjrom/wktslicer/master/data/SIPAD_example_file.xml \n\n";
